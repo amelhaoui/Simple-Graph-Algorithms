@@ -36,7 +36,7 @@ public:
     
     bool IsFullyConnected(std::shared_ptr<Graph<T>> g);
     
-    // Algorithm to retrieve minimal distance to al vertices from a start node idx
+    // Algorithm to retrieve minimal distance to all vertices from a start node idx
     // Distance in terms of edges separting start_idx and all vertices
     // unreachable nodes have value of UINT64_MAX
     std::unordered_map<uint64_t, uint64_t> GetShortestDistances(std::shared_ptr<Graph<T>> graph,
@@ -53,10 +53,6 @@ public:
     // condition to wait until an index node has been added to the stack of jobs or to exist if notfied to
     // when an element is available one of the waiting thread proceed
     std::condition_variable condition;
-    // determine when to stop thread (when all threads are blocked waiting for a condition)
-    bool stop_program = false;
-    
-    bool is_fully_connected = true;
     
     
     bool IsWeaklyConnectedParallel(std::shared_ptr<Graph<T>> graph, ThreadPool &thread_pool);
@@ -71,14 +67,16 @@ public:
     void consume_nodes(std::shared_ptr<Graph<T>> graph,
                        std::shared_ptr<std::stack<uint64_t>> pool,
                        std::shared_ptr<std::unordered_map<uint64_t, bool>> visited,
-                       std::shared_ptr<int> num_running_thread);
+                       std::shared_ptr<int> num_running_thread,
+                       std::shared_ptr<bool> stop_program);
     
     // consume nodes on the queue and updating distances
     void consume_nodes_distance(std::shared_ptr<Graph<T>> graph,
                            std::shared_ptr<std::queue<uint64_t>> pool,
                            std::shared_ptr<std::unordered_map<uint64_t, bool>> visited,
                            std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> distances,
-                                std::shared_ptr<int> num_blocked_thread);
+                                std::shared_ptr<int> num_blocked_thread,
+                                std::shared_ptr<bool> stop_program);
     
     // push the element index to the stack and ensuring it's atomic by a lock_guard
     void push_element(std::shared_ptr<std::stack<uint64_t>> pool, uint64_t index);
@@ -93,17 +91,11 @@ public:
     // the result to the main thread
     void is_fully_connected_helper(uint64_t start, uint64_t end,
                               std::unordered_map<uint64_t, std::unordered_map<uint64_t, bool>>& edges,
-                                   uint64_t num_distinct_edges, bool& is_fully_connected);
-    
-    
-//    bool launch_thread(std::shared_ptr<int> num_available_th);
-//    void increment_available_thread(std::shared_ptr<int> num_available_th);
+                                   uint64_t num_distinct_edges,
+                                   std::shared_ptr<bool> is_fully_connected);
     
 //----- Common ------
-    
-    // Reverse Edge's direction for all edges and return a pointer to a new graph
-    std::shared_ptr<Graph<T>> reverse_edges_direction (std::shared_ptr<Graph<T>> graph);
-    
+        
     // rotate the edge matrix representation and return smart pointer to a new graph
     std::shared_ptr<Graph<T>> transform_graph_to_undirected (std::shared_ptr<Graph<T>> graph);
 
@@ -137,13 +129,12 @@ bool GraphAlgorithm<T>::IsFullyConnected(std::shared_ptr<Graph<T>> graph) {
     // iterate over all vertices and compare the size of edges starting from this vertices
     for (auto it = graph->begin(); it != graph->end(); ++it) {
         // if there is a self-edge for the node *it, we decrement the size before we compare
-        if (edges[*it].find(*it) != edges[*it].end()) {
-            if (edges[*it].size() - 1 != num_distinct_edges)
+        if (edges[*it].find(*it) != edges[*it].end() &&
+            edges[*it].size() - 1 != num_distinct_edges)
                 return false;
-        } else {
-            if (edges[*it].size() != num_distinct_edges)
+        else if (edges[*it].find(*it) == edges[*it].end()
+                 && edges[*it].size() != num_distinct_edges)
                 return false;
-        }
     }
     
     return true;
@@ -243,64 +234,58 @@ bool GraphAlgorithm<T>::IsFullyConnectedParallel(std::shared_ptr<Graph<T>> graph
     
     std::unordered_map<uint64_t, std::unordered_map<uint64_t, bool>>& edges = graph->get_all_edges();
     uint64_t num_distinct_edges = graph->get_nodes().size() - 1; // return |V|-1  where graph(V,E)
-    
+    std::shared_ptr<bool> is_fully_connected(new bool(true));
+
     // we verify first that there is at least one edge starting from each node
     if (edges.size() != graph->get_nodes().size())
         return false;
     
     uint64_t bucket_count = edges.bucket_count();
-    std:: cout << bucket_count << std::endl;
     // divide the number of bucket by available cores
+    // if the number of buckets < num core
+    // adopt mono thread
     uint64_t window = bucket_count/std::thread::hardware_concurrency();
+    uint64_t num_threads;
+    if (window != 0)
+        num_threads = std::thread::hardware_concurrency();
+    else
+        num_threads = 1;
     // the number of buckets isn't necessary a multiple of available concurrent cores
     uint64_t add = bucket_count%std::thread::hardware_concurrency();
-    //  std::cout << window << " " << add << std::endl;
-    
-    // std::vector<std::thread>  thread_pool; old version
     
     uint64_t start = 0, end = window + add;
     
-    int start_size = thread_pool.size();
     
-    for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
+    for (int i = 0; i < num_threads; ++i) {
         
-        thread_pool.doJob(std::bind(&GraphAlgorithm<T>::is_fully_connected_helper, this,
-                                          start, end, std::ref(edges), num_distinct_edges, std::ref(is_fully_connected)
+        thread_pool.doJob("FullyConnected", std::bind(&GraphAlgorithm<T>::is_fully_connected_helper, this,
+                                          start, end, std::ref(edges), num_distinct_edges, is_fully_connected
                                           ));
-        //std::cout << "start: " << start << " and end: " << end << std::endl;
         start = end;
         end = start + window - 1;
     }
     
-    // wait that the job launched finished
-    while (thread_pool.size() != start_size)
+    // wait that the job launched finishes
+    while (!thread_pool.isFinished("FullyConnected"))
         continue;
     
-    // wait for all threads to finish
-//    for (auto&th : thread_pool)
-//        th.join();
-    
-
-    return is_fully_connected;
-                           
+    return *is_fully_connected;
 }
 
 template <typename T>
 void GraphAlgorithm<T>::is_fully_connected_helper(uint64_t start, uint64_t end, std::unordered_map<uint64_t,
                                                   std::unordered_map<uint64_t, bool>>& edges,
-                                                  uint64_t num_distinct_edges, bool& is_fully_connected) {
+                                                  uint64_t num_distinct_edges,
+                                                  std::shared_ptr<bool> is_fully_connected) {
     
     for (uint64_t  i = start; i < end; ++i) {
         {
-                std::lock_guard<std::mutex> lk(mutex);
-                if (!is_fully_connected) return;
-
+            // we verify if another thread have found it's not fully connected
+            std::lock_guard<std::mutex> lk(mutex);
+            if (!(*is_fully_connected)) return;
         }
-        //if (edges.bucket (i) == 0) continue;
+
         for (auto local_it = edges.begin(i); local_it != edges.end(i); ++local_it) {
-            { std::lock_guard<std::mutex> lk(stack_mutex);
-            //std::cout << local_it->first << " and size " << (local_it->second).size() << " num " << num_distinct_edges << std::endl;
-            }
             uint64_t source = local_it->first;
             std::unordered_map<uint64_t, bool>& out_edges = local_it->second;
             
@@ -308,7 +293,7 @@ void GraphAlgorithm<T>::is_fully_connected_helper(uint64_t start, uint64_t end, 
                 (out_edges.find(source) == out_edges.end() && out_edges.size() != num_distinct_edges)) {
                 {
                     std::lock_guard<std::mutex> lk(mutex);
-                    is_fully_connected = false;
+                    *is_fully_connected = false;
                 }
             }
             
@@ -319,13 +304,16 @@ void GraphAlgorithm<T>::is_fully_connected_helper(uint64_t start, uint64_t end, 
 template <typename T>
 std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> GraphAlgorithm<T>::GetShortestDistancesParallel(std::shared_ptr<Graph<T>> graph,
                                                                                                         uint64_t start_idx, ThreadPool& thread_pool) {
+    // verify that the node exist otherwise return null
+    if (graph->get_nodes().find(start_idx) == graph->get_nodes().end())
+        return NULL;
     // push both to the heap of the process
     // better than sharing thread's stack memory adresses
     
     std::shared_ptr<std::unordered_map<uint64_t, bool>> visited(new std::unordered_map<uint64_t, bool>);
     
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> distances(new std::unordered_map<uint64_t, uint64_t>);
-    // init distances to MAX value as they were not reacheable
+    // init distances to MAX value as they are not reacheable
     // it's possible to do it in parallel using bucket_count since unordered map iterator
     // are Forward type and not RAI
     for (auto it = graph->get_nodes().begin(); it != graph->get_nodes().end(); ++it)
@@ -333,10 +321,10 @@ std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> GraphAlgorithm<T>::GetSh
 
     std::shared_ptr<int> num_blocked_thread(new int());
     std::shared_ptr<std::queue<uint64_t>> queue_pool(new std::queue<uint64_t>());
+    std::shared_ptr<bool> stop_program(new bool());
+
     
-    
-    //std::vector<std::thread>  thread_pool;
-    
+    // init start node
     uint64_t start_node = start_idx;
     distances->at(start_node) = 0;
     
@@ -344,23 +332,17 @@ std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> GraphAlgorithm<T>::GetSh
     queue_pool->push(start_node);
     visited->insert({start_node, true});
     
-    // start_size allows us to determine when jobs have ended
-    int start_size = thread_pool.size();
-    
     // launch conccurent jobs
     for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
-        thread_pool.doJob(std::bind(&GraphAlgorithm<T>::consume_nodes_distance, this,
-                                    graph, queue_pool, visited, distances, num_blocked_thread));
+        thread_pool.doJob("distances", std::bind(&GraphAlgorithm<T>::consume_nodes_distance, this,
+                                    graph, queue_pool, visited, distances, num_blocked_thread, stop_program));
 
     }
     
-    // wait for all threads to finish
-    while (thread_pool.size() != start_size)
-        continue;
-    
-    //    for (auto&th : thread_pool)
-    //        th.join();
-    
+    // wait for jobs to finish
+    while (!thread_pool.isFinished("distances"))
+           continue;
+
     // at this point only the main thread is running
     // it's safe to get the size of the hash table
     return distances;

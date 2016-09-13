@@ -17,9 +17,8 @@ template <typename T>
 bool GraphAlgorithm<T>::is_node_visited(std::shared_ptr<std::unordered_map<uint64_t, bool>> visited,
                                         uint64_t index) {
     
-    std::unique_lock<std::mutex> lk(visit_node_mutex);
+    std::lock_guard<std::mutex> lk(visit_node_mutex);
     if(visited->find(index) == visited->end()) {
-        //std::cout << "index  " << index << " used by thread " << std::this_thread::get_id() << std::endl;
         visited->insert({index, true});
         return true;
     }
@@ -29,11 +28,9 @@ bool GraphAlgorithm<T>::is_node_visited(std::shared_ptr<std::unordered_map<uint6
 // push to the top an element and notify one of the thread waiting this condition
 template <typename T>
 void GraphAlgorithm<T>::push_element(std::shared_ptr<std::stack<uint64_t>> pool, uint64_t index) {
-    std::unique_lock<std::mutex> lk(stack_mutex);
-    //std::cout << "index  " << index << " was pushed by thread " << std::this_thread::get_id() << std::endl;
+    std::lock_guard<std::mutex> lk(stack_mutex);
     pool->push(index);
     condition.notify_one();
-
 }
 
 // loop waiting for elements to be added to the stack and consumed
@@ -43,20 +40,21 @@ template <typename T>
 void GraphAlgorithm<T>::consume_nodes(std::shared_ptr<Graph<T>> graph,
                                                std::shared_ptr<std::stack<uint64_t>> pool,
                             std::shared_ptr<std::unordered_map<uint64_t, bool>> visited,
-                                               std::shared_ptr<int> num_blocked_thread) {
+                                               std::shared_ptr<int> num_blocked_thread,
+                                      std::shared_ptr<bool> stop_program) {
     
     bool first_try = true;
     
     while (true) {
         uint64_t current_node;
-    
+        
         {
             std::unique_lock<std::mutex> lk(stack_mutex);
             
             // increment and decrement at the end of the block to detect how many thread are within the block
             ++(*num_blocked_thread);
             
-
+            
             // verify if all threads are waiting, if yes trigger the stop option
             // => no thread can access the stack and send notification
             // and notify all waiting thread to stop
@@ -70,21 +68,21 @@ void GraphAlgorithm<T>::consume_nodes(std::shared_ptr<Graph<T>> graph,
                     continue;
                 }
                 
-                stop_program = true;
+                *stop_program = true;
                 condition.notify_all();
                 return;
             }
             
-            while (pool->empty() && !stop_program )
+            while (pool->empty() && !(*stop_program) )
                 condition.wait(lk);
             
-            if (stop_program) {
+            if (*stop_program) {
                 return;
             }
             
             current_node = pool->top();
             pool->pop();
-
+            
             --(*num_blocked_thread);
         }
         
@@ -104,7 +102,6 @@ void GraphAlgorithm<T>::consume_nodes(std::shared_ptr<Graph<T>> graph,
         }
     }
     
-
 }
 
 // Rotate the edge matrix representation and return smart pointer to a new graph
@@ -142,6 +139,7 @@ bool GraphAlgorithm<T>::DepthFirstSearch_Parallel (std::shared_ptr<Graph<T>> gra
     std::shared_ptr<std::unordered_map<uint64_t, bool>> visited(new std::unordered_map<uint64_t, bool>);
     std::shared_ptr<int> num_blocked_thread(new int());
     std::shared_ptr<std::stack<uint64_t>> stack_pool(new std::stack<uint64_t>);
+    std::shared_ptr<bool> stop_program(new bool());
     
     //std::vector<std::thread>  thread_pool;
     
@@ -151,21 +149,15 @@ bool GraphAlgorithm<T>::DepthFirstSearch_Parallel (std::shared_ptr<Graph<T>> gra
     stack_pool->push(start_node);
     visited->insert({start_node, true});
     
-    int start_size = thread_pool.size();
     // set concurent jobs
     for (int i = 0; i < std::thread::hardware_concurrency(); ++i) {
-        thread_pool.doJob(std::bind(&GraphAlgorithm<T>::consume_nodes, this,
-                                          graph, stack_pool, visited, num_blocked_thread));
+        thread_pool.doJob("DFS", std::bind(&GraphAlgorithm<T>::consume_nodes, this,
+                                          graph, stack_pool, visited, num_blocked_thread, stop_program));
     }
     
     // wait for all threads to finish
-    while (thread_pool.size() != start_size)
+    while (!thread_pool.isFinished("DFS"))
         continue;
-    
-    // old version where we were creating a constant number of thread running
-    // then we join them
-//    for (auto&th : thread_pool)
-//        th.join();
     
     // at this point only the main thread is running
     // it's safe to get the size of the hash table
@@ -178,7 +170,8 @@ void GraphAlgorithm<T>::consume_nodes_distance(std::shared_ptr<Graph<T>> graph,
                                       std::shared_ptr<std::queue<uint64_t>> pool,
                                       std::shared_ptr<std::unordered_map<uint64_t, bool>> visited,
                                     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>> distances,
-                                      std::shared_ptr<int> num_blocked_thread) {
+                                      std::shared_ptr<int> num_blocked_thread,
+                                               std::shared_ptr<bool> stop_program) {
     
     bool first_try = true;
     
@@ -205,15 +198,15 @@ void GraphAlgorithm<T>::consume_nodes_distance(std::shared_ptr<Graph<T>> graph,
                     continue;
                 }
                 
-                stop_program = true;
+                *stop_program = true;
                 condition.notify_all();
                 return;
             }
             
-            while (pool->empty() && !stop_program )
+            while (pool->empty() && !*stop_program )
                 condition.wait(lk);
             
-            if (stop_program) {
+            if (*stop_program) {
                 return;
             }
             

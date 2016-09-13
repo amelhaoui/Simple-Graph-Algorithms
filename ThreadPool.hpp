@@ -25,9 +25,9 @@ class ThreadPool
     std::mutex lock_;
     std::condition_variable condVar_;
     bool shutdown_;
-    std::queue <std::function <void (void)>> jobs_;
+    std::queue <std::pair<std::function <void (void)>, std::string>> jobs_;
     std::vector <std::thread> threads_;
-    int size_;
+    std::unordered_map<std::string, int> tags;
     
 public:
     
@@ -49,25 +49,29 @@ public:
         }
         
         // Wait for all threads to stop
-        std::cerr << "Joining threads" << std::endl;
+        ///std::cerr << "Joining threads" << std::endl;
         for (auto& thread : threads_)
             thread.join();
     }
     
-    void doJob (std::function <void (void)> func)
+    void doJob (std::string tag, std::function <void (void)> func)
     {
         // Place a job on the queue and unblock a thread
         std::unique_lock <std::mutex> l (lock_);
-        ++size_;
-        jobs_.push(func);
+        ++tags[tag];
+        jobs_.push(std::make_pair(func, tag));
         condVar_.notify_one();
     }
     
-    int size () { return size_; }
+    int isFinished (std::string str) {
+        std::lock_guard <std::mutex> l (lock_);
+        return tags[str] == 0;
+    }
     
     void threadEntry (int i)
     {
         std::function <void (void)> job;
+        std::string tag;
         
         while (1)
         {
@@ -80,12 +84,13 @@ public:
                 if (jobs_.empty ())
                 {
                     // No jobs to do and we are shutting down
-                    std::cerr << "Thread " << i << " terminates" << std::endl;
+                    //std::cerr << "Thread " << i << " terminates" << std::endl;
                     return;
                 }
                 
-                std::cerr << "Thread " << i << " does a job" << std::endl;
-                job = jobs_.front ();
+                //std::cerr << "Thread " << i << " does a job" << std::endl;
+                job = jobs_.front ().first;
+                tag = jobs_.front ().second;
                 jobs_.pop();
             }
             
@@ -95,7 +100,7 @@ public:
             // decrement the size of waiting jobs
             {
              std::unique_lock <std::mutex> l (lock_);
-                --size_;
+                --tags[tag];
             }
         }
         

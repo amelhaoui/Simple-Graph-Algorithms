@@ -91,8 +91,6 @@ public:
             return index_;
         }
         
-        //friend void swap(self_type& lhs, self_type& rhs); //
-        
         pointer operator->() {
             return this;
         }
@@ -149,11 +147,6 @@ public:
             return *this;
         }
         
-        //    self_type operator++(int) {
-        //        index_++;
-        //        return index_;
-        //    }
-        
         value_type& operator*() {
             return pair_;
         }
@@ -183,10 +176,9 @@ public:
 template< typename T>
 std::string  Graph<T>::export_node_property_to_string() {
     std::string result;
-    uint64_t size = this->get_nodes()->size();
     
-    for (uint64_t i = 1; i <= size ; ++i) {
-        result += "node_id_" + std::to_string(i) + " : " + get_node_property(i-1) + "\n";
+    for (auto i = begin() ; i != end() ; ++i) {
+        result += "node_id_" + std::to_string(*i) + " : " + get_node_property(*i) + "\n";
     }
     
     return result;
@@ -222,8 +214,8 @@ template< typename T>
 
 template< typename T>
 T Graph<T>::get_node_property(uint64_t n) {
-    auto it = get_nodes()->find(n);
-    if (n != get_nodes()->end())
+    auto it = get_nodes().find(n);
+    if (it != get_nodes().end())
         return nodes_[n];
     else
         return NULL;
@@ -246,10 +238,5 @@ void Graph<T>::remove_edge(uint64_t source, uint64_t destination) {
     edge_[source].erase(destination);
 }
 
-
-//template< typename T>
-//bool Graph<T>::are_nodes_adjacents(uint64_t a, uint64_t b) {
-//    return (edge_.find()[a][b]|| edge[b][a]);
-//}
 
 #endif /* Graph_h */
