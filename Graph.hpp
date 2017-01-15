@@ -35,8 +35,8 @@ public:
     
     void add_edge(uint64_t source, uint64_t destination);
     void remove_edge(uint64_t source, uint64_t destination);
-    
-    list_nodes& get_nodes(); // return eference to the list of vertices
+
+  list_nodes &get_nodes(); // return reference to the list of vertices
     void insert_node(uint64_t id);
     void set_nodes(list_nodes& g);
     

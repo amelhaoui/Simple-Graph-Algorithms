@@ -8,11 +8,7 @@
 
 #include <iostream>
 #include <thread>
-#include <mutex>
-#include <chrono>
 #include <vector>
-#include <cstdint>
-#include <functional>
 #include <queue>
 
 #include "GraphAlgorithm.hpp"
@@ -29,22 +25,21 @@ int main(int argc, const char * argv[]) {
     GraphLoader g_loader;
     
     // used to write in file for testing
-    /**
-    std::ofstream file("test.in");
-    if (file.is_open()) {
-        for (int i = 0; i < 50; ++i) {
-            for (int j = 0; j < 50; ++j) {
-                if (j == i) {
-               file << i << " " << j << "\n";
-              }
+  /**
+  std::ofstream file(argv[1]);
+  if (file.is_open()) {
+      for (int i = 0; i < 50; ++i) {
+          for (int j = 0; j < 50; ++j) {
+              if (j == i) {
+             file << i << " " << j << "\n";
             }
-        }
-    }
-    file.close();
-    **/
-    
+          }
+      }
+  }
+  file.close();
+  **/
 
-    g_loader.load_graph(graph, "test.in");
+  g_loader.load_graph(graph, argv[1]);
     
     std::cout << graph->export_node_property_to_string();
     
@@ -53,7 +48,6 @@ int main(int argc, const char * argv[]) {
 
     std::cout << " Is Weakly Connected Parallel " << algo.IsWeaklyConnectedParallel(graph, pool) << std::endl;
 
-    
     std::shared_ptr<std::unordered_map<uint64_t, uint64_t>>  result = algo.GetShortestDistancesParallel(graph, 0, pool);
     
     if (result != NULL) {
@@ -61,18 +55,11 @@ int main(int argc, const char * argv[]) {
             std::cout <<i->first << " is far by " << i->second << std::endl;
     }
     
-    
     std::cout << "Is Fully Connected Parallel " << algo.IsFullyConnectedParallel(graph, pool) << std::endl;
     
     std::cout << "Is Fully Connected " << algo.IsFullyConnected(graph) << std::endl;
     
     std::cout << " Is Weakly Connected " << algo.IsWeaklyConnected(graph) << std::endl;
 
-
-
-    
-
-    
-    
     return 0;
 }
