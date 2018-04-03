@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ayoubserti/Simple-Graph-Algorithms.svg?branch=master)](https://travis-ci.org/ayoubserti/Simple-Graph-Algorithms)
+
 #About 
 
 C++ Graph representation along with some algorithms : Is Weakly connected, complete graph, Shortest path. Both sequential and Parallel
