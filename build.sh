@@ -95,7 +95,7 @@ if [ $_should_build == 1 ]; then
 	if [ $_build_xcode == 1 ]; then
 		xcodebuild
 	else
-    	make -j$_jobs_count
+    	make -j$_jobs_count all_unity
 	fi
 
 fi

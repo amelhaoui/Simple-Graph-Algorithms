@@ -1,6 +1,9 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.1)
+set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+include(cotire)
+
 SET(project_name "Simple_Graph_Algrithms")
-project(project_name)
+project(${project_name})
 
 ###############################################################################
 ## Enable C and C++ languages.
@@ -50,6 +53,9 @@ add_executable(SGA ${PROJECT_SRC_LST})
 target_compile_options(SGA PUBLIC $<$<CONFIG:DEBUG>:-D${project_name}_DEBUG>)
 target_include_directories(SGA PUBLIC ${PROJECT_SOURCE_DIR}/src/)
 
+#cotire for precompiled headers
+set_target_properties(SGA PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "src/Graph.hpp")
+cotire(SGA)
 ###############################################################################
 ## Unit test target.
 ###############################################################################

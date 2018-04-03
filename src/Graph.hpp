@@ -13,7 +13,13 @@
 #include <vector>
 #include <utility>
 #include <iterator>
-
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <future>
+#include <condition_variable>
+#include <stack>
+#include <string>
 
 
 template <typename T>

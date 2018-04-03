@@ -9,16 +9,12 @@
 #ifndef GraphAlgorithm_hpp
 #define GraphAlgorithm_hpp
 
-#include <thread>
-#include <mutex>
-#include <queue>
-#include <future>
-#include <condition_variable>
+
 
 #include "Graph.hpp"
 #include "ThreadPool.hpp"
 
-#include <stack>
+
 
 template<typename T>
 class GraphAlgorithm {
