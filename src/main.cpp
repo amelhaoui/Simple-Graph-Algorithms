@@ -6,11 +6,7 @@
 //  Copyright © 2016 Ecole Mohammadia d'Ingenieurs. All rights reserved.
 //
 
-#include <iostream>
-#include <thread>
-#include <vector>
-#include <queue>
-
+#include "Graph.hpp"
 #include "GraphAlgorithm.hpp"
 #include "GraphLoader.hpp"
 
